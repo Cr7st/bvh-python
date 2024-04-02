@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 
 class BvhNode:
@@ -47,6 +48,7 @@ class Bvh:
         self.data = data
         self.root = BvhNode()
         self.frames = []
+        self.frames_data = None
         self.tokenize()
 
     def tokenize(self):
@@ -56,13 +58,15 @@ class Bvh:
             if char not in ('\n', '\r'):
                 accumulator += char
             elif accumulator:
-                    first_round.append(re.split('\\s+', accumulator.strip()))
-                    accumulator = ''
+                first_round.append(re.split('\\s+', accumulator.strip()))
+                accumulator = ''
         node_stack = [self.root]
         frame_time_found = False
         node = None
         for item in first_round:
             if frame_time_found:
+                for i, data in enumerate(item):
+                    item[i] = float(data)
                 self.frames.append(item)
                 continue
             key = item[0]
@@ -75,6 +79,7 @@ class Bvh:
                 node_stack[-1].add_child(node)
             if item[0] == 'Frame' and item[1] == 'Time:':
                 frame_time_found = True
+        self.frames_data = np.array(self.frames)
 
     def search(self, *items):
         found_nodes = []
@@ -90,6 +95,7 @@ class Bvh:
                     found_nodes.append(node)
             for child in node:
                 check_children(child)
+
         check_children(self.root)
         return found_nodes
 
@@ -100,6 +106,7 @@ class Bvh:
             joints.append(joint)
             for child in joint.filter('JOINT'):
                 iterate_joints(child)
+
         iterate_joints(next(self.root.filter('ROOT')))
         return joints
 
@@ -110,6 +117,7 @@ class Bvh:
             joints.append(joint.value[1])
             for child in joint.filter('JOINT'):
                 iterate_joints(child)
+
         iterate_joints(next(self.root.filter('ROOT')))
         return joints
 
@@ -152,7 +160,7 @@ class Bvh:
         else:
             channel_index = -1
         return channel_index
-        
+
     def frame_joint_channel(self, frame_index, joint, channel, value=None):
         joint_index = self.get_joint_channels_index(joint)
         channel_index = self.get_joint_channel_index(joint, channel)
@@ -215,3 +223,13 @@ class Bvh:
             return float(next(self.root.filter('Frame')).value[2])
         except StopIteration:
             raise LookupError('frame time not found')
+
+    @property
+    def root_translation(self):
+        return self.frames_data[:, :3]
+
+    @property
+    def joint_rotations(self):
+        return self.frames_data[:, 3:]
+
+
